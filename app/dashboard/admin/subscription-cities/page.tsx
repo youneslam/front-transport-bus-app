@@ -16,6 +16,7 @@ import {
   updateSubscriptionCity,
   deleteSubscriptionCity,
   SubscriptionCity,
+  CreateSubscriptionCityRequest,
 } from '@/lib/api/subscriptions'
 
 export default function AdminSubscriptionCitiesPage() {
@@ -32,7 +33,6 @@ export default function AdminSubscriptionCitiesPage() {
   const [name, setName] = useState('')
   const [monthlyPriceNormal, setMonthlyPriceNormal] = useState<number>(0)
   const [yearlyPriceNormal, setYearlyPriceNormal] = useState<number>(0)
-  const [cityId, setCityId] = useState<number | undefined>(undefined)
 
   useEffect(() => {
     const token = localStorage.getItem("authToken")
@@ -65,7 +65,6 @@ export default function AdminSubscriptionCitiesPage() {
     setName('')
     setMonthlyPriceNormal(0)
     setYearlyPriceNormal(0)
-    setCityId(undefined)
     setOpen(true)
   }
 
@@ -74,7 +73,6 @@ export default function AdminSubscriptionCitiesPage() {
     setName(city.name)
     setMonthlyPriceNormal(city.monthlyPriceNormal)
     setYearlyPriceNormal(city.yearlyPriceNormal)
-    setCityId(city.id)
     setOpen(true)
   }
 
@@ -84,44 +82,56 @@ export default function AdminSubscriptionCitiesPage() {
         toast({ title: 'Validation', description: 'Le nom de la ville est requis.' })
         return
       }
-      if (monthlyPriceNormal <= 0) {
+      if (monthlyPriceNormal <= 0 || isNaN(monthlyPriceNormal)) {
         toast({ title: 'Validation', description: 'Le prix mensuel doit être supérieur à 0.' })
         return
       }
-      if (yearlyPriceNormal <= 0) {
+      if (yearlyPriceNormal <= 0 || isNaN(yearlyPriceNormal)) {
         toast({ title: 'Validation', description: 'Le prix annuel doit être supérieur à 0.' })
         return
       }
 
       if (editing) {
         await updateSubscriptionCity(editing.id, { 
-          name, 
-          monthlyPriceNormal, 
-          yearlyPriceNormal 
+          name: name.trim(), 
+          monthlyPriceNormal: Number(monthlyPriceNormal), 
+          yearlyPriceNormal: Number(yearlyPriceNormal)
         })
         toast({ title: 'Mis à jour', description: 'Ville d\'abonnement mise à jour.' })
       } else {
-        const payload: any = {
+        // Calculer automatiquement le prochain ID en incrémentant le maximum existant
+        const maxId = cities.length > 0 
+          ? Math.max(...cities.map(c => c.id))
+          : 0
+        const nextId = maxId + 1
+        
+        const payload: CreateSubscriptionCityRequest = {
+          id: nextId,
           name: name.trim(),
-          monthlyPriceNormal,
-          yearlyPriceNormal
+          monthlyPriceNormal: Number(monthlyPriceNormal),
+          yearlyPriceNormal: Number(yearlyPriceNormal)
         }
-        if (cityId) {
-          payload.id = cityId
-        }
-        await createSubscriptionCity(payload)
-        toast({ title: 'Créé', description: 'Ville d\'abonnement créée.' })
+        
+        console.log('Création de ville d\'abonnement avec payload:', payload)
+        const created = await createSubscriptionCity(payload)
+        console.log('Ville créée avec succès:', created)
+        toast({ title: 'Créé', description: 'Ville d\'abonnement créée avec succès.' })
       }
       setOpen(false)
+      // Réinitialiser le formulaire
+      setName('')
+      setMonthlyPriceNormal(0)
+      setYearlyPriceNormal(0)
+      setEditing(null)
       load()
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Opération échouée.'
+      console.error("Erreur complète lors de la sauvegarde:", err)
       toast({ 
         title: 'Erreur', 
         description: errorMessage,
         variant: "destructive" as const
       })
-      console.error("Erreur complète:", err)
     }
   }
 
@@ -282,25 +292,6 @@ export default function AdminSubscriptionCitiesPage() {
           </DialogHeader>
 
           <div className="space-y-4 mt-4">
-            {!editing && (
-              <div className="space-y-2">
-                <Label htmlFor="cityId">ID de la ville (optionnel)</Label>
-                <Input
-                  id="cityId"
-                  type="number"
-                  placeholder="Ex: 1, 2, 3..."
-                  value={cityId || ''}
-                  onChange={(e) => {
-                    const value = parseInt(e.target.value)
-                    setCityId(isNaN(value) ? undefined : value)
-                  }}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Laissez vide pour que le système génère automatiquement un ID
-                </p>
-              </div>
-            )}
-
             <div className="space-y-2">
               <Label htmlFor="name">Nom de la ville *</Label>
               <Input
@@ -329,9 +320,9 @@ export default function AdminSubscriptionCitiesPage() {
                   min="0"
                   step="0.01"
                   placeholder="150.00"
-                  value={monthlyPriceNormal || ''}
+                  value={monthlyPriceNormal > 0 ? monthlyPriceNormal : ''}
                   onChange={(e) => {
-                    const value = parseFloat(e.target.value)
+                    const value = e.target.value === '' ? 0 : parseFloat(e.target.value)
                     setMonthlyPriceNormal(isNaN(value) ? 0 : value)
                   }}
                   onKeyDown={(e) => {
@@ -354,9 +345,9 @@ export default function AdminSubscriptionCitiesPage() {
                   min="0"
                   step="0.01"
                   placeholder="1500.00"
-                  value={yearlyPriceNormal || ''}
+                  value={yearlyPriceNormal > 0 ? yearlyPriceNormal : ''}
                   onChange={(e) => {
-                    const value = parseFloat(e.target.value)
+                    const value = e.target.value === '' ? 0 : parseFloat(e.target.value)
                     setYearlyPriceNormal(isNaN(value) ? 0 : value)
                   }}
                   onKeyDown={(e) => {

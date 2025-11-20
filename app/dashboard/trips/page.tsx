@@ -2,10 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from 'next/navigation'
-import { MapPin, CalendarDays } from 'lucide-react'
+import { MapPin, TrendingUp, DollarSign } from 'lucide-react'
 import { fetchUserTickets, UserTicket } from '@/lib/api/user-tickets'
 import { fetchAllTrajets, Trajet } from '@/lib/api/trajets'
 import { fetchCities, City } from '@/lib/api/cities'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
 export default function TripsPage() {
   const router = useRouter()
@@ -67,59 +69,162 @@ export default function TripsPage() {
     })
   }, [tickets, date, search, trajets])
 
-  const totalValid = useMemo(() => tickets.reduce((s, t) => s + (t.valid ? 1 : 0), 0), [tickets])
-
-  const aggregates = useMemo(() => {
-    const map = new Map<number, { trajet?: Trajet; city?: City; count: number; totalPrice: number }>()
-    filtered.forEach((tk) => {
-      const traj = trajets.find((tr) => tr.id === tk.ticketId)
-      const trajetId = traj?.id ?? -1
-      const city = traj ? cities.find((c) => c.id === traj.cityId) : undefined
-      const price = city?.priceInDhs ?? 0
-      const entry = map.get(trajetId) || { trajet: traj, city, count: 0, totalPrice: 0 }
-      entry.trajet = traj
-      entry.city = city
-      entry.count += 1
-      entry.totalPrice = Number((entry.totalPrice + price).toFixed(2))
-      map.set(trajetId, entry)
+  // Calculer les dépenses quotidiennes pour le graphique
+  const dailySpending = useMemo(() => {
+    const spendingByDate = new Map<string, number>()
+    
+    tickets.forEach(ticket => {
+      const trajet = trajets.find(t => t.id === ticket.ticketId)
+      const city = trajet ? cities.find(c => c.id === trajet.cityId) : undefined
+      const price = city?.priceInDhs || 0
+      
+      const date = new Date(ticket.createdAt)
+      const dateKey = date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+      
+      const currentTotal = spendingByDate.get(dateKey) || 0
+      spendingByDate.set(dateKey, currentTotal + price)
     })
+    
+    // Convertir en tableau trié par date
+    return Array.from(spendingByDate.entries())
+      .map(([date, amount]) => ({ date, amount: Number(amount.toFixed(2)) }))
+      .sort((a, b) => {
+        const dateA = new Date(a.date.split('/').reverse().join('-'))
+        const dateB = new Date(b.date.split('/').reverse().join('-'))
+        return dateA.getTime() - dateB.getTime()
+      })
+      .slice(-30) // Derniers 30 jours
+  }, [tickets, trajets, cities])
 
-    return Array.from(map.values()).filter(it => it.count > 0)
-  }, [filtered, trajets, cities])
+  const totalSpending = useMemo(() => {
+    return dailySpending.reduce((sum, day) => sum + day.amount, 0)
+  }, [dailySpending])
 
   return (
     <div>
       <div>
         {/* Header */}
-        <div className="mb-6">
+        <div className="mb-8">
           <h1 className="section-header">My Trips</h1>
-          {/* removed the small side description as requested */}
+          <p className="section-description">Suivez vos voyages et votre consommation</p>
         </div>
 
-        {/* Top summary cards (styled like dashboard stat cards) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
-          {aggregates.length === 0 ? (
-            <div className="stat-card rounded-xl col-span-1 md:col-span-2 lg:col-span-4">
-              <div className="text-sm text-muted-foreground">Aucun trajet à afficher pour les filtres sélectionnés.</div>
-            </div>
-          ) : (
-            aggregates.slice(0, 4).map((it, i) => (
-              <div key={i} className="stat-card rounded-xl">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground font-medium">{it.trajet?.nomTrajet ?? 'Trajet'}</p>
-                    <p className="text-3xl font-bold text-foreground mt-2">{it.count}</p>
-                    <p className="text-xs text-muted-foreground mt-2">{it.city?.cityName ?? 'Ville inconnue'}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm text-muted-foreground">Total</p>
-                    <p className="text-2xl font-bold text-accent mt-2">{it.totalPrice} DH</p>
+        {/* Graphique de consommation quotidienne avec Chart UI */}
+        {tickets.length > 0 ? (
+          <Card className="mb-8">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-xl font-bold flex items-center gap-2">
+                    <TrendingUp className="w-5 h-5 text-primary" />
+                    Consommation quotidienne
+                  </CardTitle>
+                  <CardDescription className="mt-2">
+                    Dépenses quotidiennes sur les 30 derniers jours
+                  </CardDescription>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm text-muted-foreground">Total</div>
+                  <div className="text-2xl font-bold text-primary flex items-center gap-1">
+                    <DollarSign className="w-5 h-5" />
+                    {totalSpending.toFixed(2)} DH
                   </div>
                 </div>
               </div>
-            ))
-          )}
-        </div>
+            </CardHeader>
+            <CardContent>
+              {dailySpending.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <TrendingUp className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                  <p>Aucune donnée de consommation disponible</p>
+                </div>
+              ) : (
+                <>
+                  <div className="h-[320px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={dailySpending}
+                        margin={{
+                          top: 10,
+                          right: 20,
+                          left: 10,
+                          bottom: 40,
+                        }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+                        <XAxis
+                          dataKey="date"
+                          stroke="var(--color-muted-foreground)"
+                          tickLine={false}
+                          axisLine={false}
+                          tickMargin={8}
+                          angle={-40}
+                          textAnchor="end"
+                          height={70}
+                          style={{ fontSize: '11px' }}
+                        />
+                        <YAxis
+                          stroke="var(--color-muted-foreground)"
+                          tickLine={false}
+                          axisLine={false}
+                          tickMargin={8}
+                          style={{ fontSize: '11px' }}
+                          label={{ 
+                            value: 'Montant (DH)', 
+                            angle: -90, 
+                            position: 'insideLeft',
+                            style: { textAnchor: 'middle', fontSize: '12px' }
+                          }}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: "var(--color-card)",
+                            border: "1px solid var(--color-border)",
+                            borderRadius: "8px",
+                          }}
+                          formatter={(value: number) => [`${Number(value).toFixed(2)} DH`, 'Dépense']}
+                        />
+                        <Legend />
+                        <Bar 
+                          dataKey="amount" 
+                          fill="var(--color-primary)"
+                          radius={[8, 8, 0, 0]}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                
+                  {/* Statistiques */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6 pt-6 border-t border-border">
+                    <div className="text-center p-4 bg-muted/30 rounded-lg">
+                      <div className="text-sm text-muted-foreground mb-1">Total dépensé</div>
+                      <div className="text-2xl font-bold text-primary">{totalSpending.toFixed(2)} DH</div>
+                    </div>
+                    <div className="text-center p-4 bg-muted/30 rounded-lg">
+                      <div className="text-sm text-muted-foreground mb-1">Jours avec achats</div>
+                      <div className="text-2xl font-bold text-foreground">{dailySpending.length}</div>
+                    </div>
+                    <div className="text-center p-4 bg-muted/30 rounded-lg">
+                      <div className="text-sm text-muted-foreground mb-1">Moyenne quotidienne</div>
+                      <div className="text-2xl font-bold text-accent">
+                        {dailySpending.length > 0 ? (totalSpending / dailySpending.length).toFixed(2) : '0'} DH
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="mb-8">
+            <CardContent className="py-12">
+              <div className="text-center text-muted-foreground">
+                <MapPin className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                <p>Aucun ticket trouvé</p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Top controls & stats - grouped filters */}
         <div className="flex flex-col md:flex-row items-start md:items-center gap-4 mb-6">

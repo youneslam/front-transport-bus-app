@@ -4,6 +4,10 @@ export type {
   SubscriptionCity,
   SubscriptionPurchaseRequest,
   SubscriptionPurchaseResponse,
+  CreateSubscriptionCityRequest,
+  UpdateSubscriptionCityRequest,
+  PaymentIntentRequest,
+  PaymentIntentResponse,
 } from "../api"
 
 export {
@@ -16,8 +20,10 @@ export {
   listSubscriptionCities,
 
   // User subscriptions
+  fetchUserSubscriptions,
   fetchCurrentSubscription,
   purchaseSubscription,
+  createPaymentIntent,
 } from "../api"
 
 

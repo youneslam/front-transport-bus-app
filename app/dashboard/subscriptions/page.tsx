@@ -11,6 +11,7 @@ import {
   SubscriptionPurchaseResponse,
   fetchCurrentSubscription,
 } from '@/lib/api/subscriptions'
+import { createPaymentIntent } from '@/lib/api/payments'
 import { useToast } from '@/hooks/use-toast'
 
 function daysBetween(a: Date, b: Date) {
@@ -71,14 +72,22 @@ export default function SubscriptionsPage() {
       setError(null)
       try {
         const res = await fetchSubscriptionCities()
-        setCities(res)
-        if (res.length > 0) setSelectedCityId(res[0].id)
+        console.log('Villes d\'abonnement récupérées:', res) // Debug
+        if (res && Array.isArray(res) && res.length > 0) {
+          setCities(res)
+          setSelectedCityId(res[0].id)
+        } else {
+          setCities([])
+          setError("Aucune ville d'abonnement disponible")
+        }
 
         const userId = typeof window !== 'undefined' ? Number(localStorage.getItem('userId') || '1') : 1
         const current = await fetchCurrentSubscription(userId).catch(() => null)
         if (current) setCurrentSubscription(current)
       } catch (err) {
+        console.error('Erreur lors du chargement des villes:', err)
         setError("Impossible de récupérer les villes d'abonnement")
+        setCities([])
       } finally {
         setLoadingCities(false)
       }
@@ -103,7 +112,13 @@ export default function SubscriptionsPage() {
     loadDetails()
   }, [selectedCityId])
 
-  const isBlockedForCity = Boolean(currentSubscription && selectedCity && currentSubscription.city?.id === selectedCity.id)
+  // Check if user has an active subscription for the selected city
+  const isBlockedForCity = Boolean(
+    currentSubscription && 
+    selectedCity && 
+    currentSubscription.city?.id === selectedCity.id &&
+    currentSubscription.active === true
+  )
 
   const handlePurchase = async (type: 'MONTHLY' | 'YEARLY') => {
     if (!selectedCity) return
@@ -113,7 +128,42 @@ export default function SubscriptionsPage() {
       const res = await purchaseSubscription({ userId, cityId: selectedCity.id, type })
       if (res.success && res.subscription) {
         setCurrentSubscription(res.subscription)
-        toast({ title: 'Succès', description: `Abonnement ${type === 'MONTHLY' ? 'mensuel' : 'annuel'} créé.` })
+        toast({
+          title: 'Succès',
+          description: `Abonnement ${type === 'MONTHLY' ? 'mensuel' : 'annuel'} créé et activé. Les anciens abonnements ont été désactivés.`,
+        })
+
+        // Initier le paiement après la création de l'abonnement
+        const amount = type === 'MONTHLY' ? selectedCity.monthlyPriceNormal : selectedCity.yearlyPriceNormal
+        try {
+        const payment = await createPaymentIntent({
+          type: 'SUBSCRIPTION',
+          referenceId: res.subscription.id,
+          amount,
+          userId,
+          currency: 'USD',
+        })
+
+        if (!payment.clientSecret) {
+          throw new Error("Le service de paiement n'a pas renvoyé de clientSecret.")
+        }
+
+        const params = new URLSearchParams({
+          type: 'SUBSCRIPTION',
+          referenceId: String(res.subscription.id),
+          amount: String(amount),
+          userId: String(userId),
+          clientSecret: payment.clientSecret,
+        })
+        router.push(`/payment?${params.toString()}`)
+        } catch (paymentError) {
+          console.error('Erreur lors de la création du paiement:', paymentError)
+          toast({
+          title: 'Paiement indisponible',
+          description: "L'abonnement est créé mais la redirection vers le paiement a échoué. Merci de réessayer ou de contacter le support.",
+            variant: 'destructive',
+          })
+        }
       } else {
         toast({ title: 'Erreur', description: res.message || 'Erreur inconnue' })
       }
@@ -131,9 +181,9 @@ export default function SubscriptionsPage() {
         <p className="section-description">Sélectionnez votre ville puis choisissez l'abonnement souhaité</p>
       </div>
 
-      {currentSubscription && (
+      {currentSubscription && currentSubscription.active && (
         <div className="mb-8">
-          <h2 className="text-lg font-semibold mb-4">Votre abonnement actuel</h2>
+          <h2 className="text-lg font-semibold mb-4">Votre abonnement actif</h2>
           <div className="card-premium rounded-xl p-6 border-2 border-primary/40 relative overflow-hidden">
             {/* Active badge */}
             <div className="absolute top-0 right-0 bg-linear-to-r from-primary to-accent text-white text-xs font-bold px-4 py-1 rounded-bl-lg">
@@ -212,18 +262,34 @@ export default function SubscriptionsPage() {
 
       {error && <div className="mb-4 p-3 text-sm text-destructive bg-destructive/10 rounded-lg border border-destructive/20">{error}</div>}
 
-      {/* City Selection */}
+      {/* City Selection - Dropdown List */}
       <div className="mb-8">
         <h2 className="text-lg font-semibold mb-3">Sélectionnez une ville</h2>
         <select
           value={selectedCityId || ''}
           onChange={(e) => setSelectedCityId(e.target.value ? Number(e.target.value) : null)}
-          disabled={loadingCities}
-          className="w-full px-4 py-3 bg-background border-2 border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary text-base disabled:opacity-50"
+          disabled={loadingCities || loadingDetails}
+          className="w-full px-4 py-3 bg-background border-2 border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary text-base disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <option value="">Sélectionnez une ville...</option>
-          {cities.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          {loadingCities ? (
+            <option value="" disabled>Chargement des villes...</option>
+          ) : cities.length === 0 ? (
+            <option value="" disabled>Aucune ville disponible</option>
+          ) : (
+            cities.map((city) => (
+              <option key={city.id} value={city.id}>
+                {city.name}
+              </option>
+            ))
+          )}
         </select>
+        {loadingCities && (
+          <p className="text-sm text-muted-foreground mt-2">Chargement des villes...</p>
+        )}
+        {!loadingCities && cities.length === 0 && (
+          <p className="text-sm text-muted-foreground mt-2">Aucune ville disponible</p>
+        )}
       </div>
 
       {/* Offers Display */}
@@ -274,8 +340,8 @@ export default function SubscriptionsPage() {
 
                 {isBlockedForCity ? (
                   <div className="p-4 rounded-lg bg-yellow-50 border border-yellow-200 text-yellow-800 text-sm">
-                    <div className="font-semibold mb-1">Abonnement existant</div>
-                    Vous avez déjà un abonnement pour {selectedCity.name}. Visitez l'agence pour le modifier.
+                    <div className="font-semibold mb-1">Abonnement actif existant</div>
+                    Vous avez déjà un abonnement actif pour {selectedCity.name}. Un nouvel abonnement désactivera automatiquement l'ancien.
                   </div>
                 ) : (
                   <button
@@ -335,8 +401,8 @@ export default function SubscriptionsPage() {
 
                 {isBlockedForCity ? (
                   <div className="p-4 rounded-lg bg-yellow-50 border border-yellow-200 text-yellow-800 text-sm">
-                    <div className="font-semibold mb-1">Abonnement existant</div>
-                    Vous avez déjà un abonnement pour {selectedCity.name}. Visitez l'agence pour le modifier.
+                    <div className="font-semibold mb-1">Abonnement actif existant</div>
+                    Vous avez déjà un abonnement actif pour {selectedCity.name}. Un nouvel abonnement désactivera automatiquement l'ancien.
                   </div>
                 ) : (
                   <button

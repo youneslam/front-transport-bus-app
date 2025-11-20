@@ -6,8 +6,7 @@ import dynamic from "next/dynamic"
 import L from "leaflet"
 import "leaflet/dist/leaflet.css"
 import { Card } from "@/components/ui/card"
-import { BusEntity, BusService } from "@/services/bus-service"
-import { socketService, BusLocationPayload } from "@/services/socket-service"
+import { BusEntity, BusService, busSocketService, BusLocationPayload } from "@/lib/api/buses"
 import { useToast } from "@/hooks/use-toast"
 
 const MapContainer = dynamic(() => import("react-leaflet").then((mod) => mod.MapContainer), { ssr: false })
@@ -56,7 +55,7 @@ export function BusMap() {
   }, [toast])
 
   useEffect(() => {
-    const unsubscribe = socketService.addListener((payload: BusLocationPayload) => {
+    const unsubscribe = busSocketService.addListener((payload: BusLocationPayload) => {
       setStatus("online")
       const { busId, latitude, longitude } = payload
       if (!busId || typeof latitude !== "number" || typeof longitude !== "number") return
@@ -80,7 +79,7 @@ export function BusMap() {
     return () => {
       clearTimeout(offlineTimer)
       unsubscribe()
-      socketService.disconnect()
+      busSocketService.disconnect()
     }
   }, [buses])
 

@@ -1,15 +1,9 @@
-export interface Bus {
-  id: number
-  matricule: string
-  description?: string
-  trajetId: number
-}
+/**
+ * Bus Service
+ * Handles all bus-related API operations
+ */
 
-export interface BusPayload {
-  matricule: string
-  description: string
-  trajetId: number
-}
+import type { Bus, BusPayload } from "@/types/bus"
 
 const BASE_URL = "/api/buses"
 
@@ -64,5 +58,6 @@ export const BusService = {
     }),
 }
 
-export type { Bus as BusEntity }
+// Re-export types for convenience
+export type { Bus, BusPayload, Bus as BusEntity } from "@/types/bus"
 

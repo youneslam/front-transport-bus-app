@@ -3,6 +3,9 @@
  * Centralized interfaces and fetch functions for booking/ticketing system
  */
 
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_GATEWAY_URL || "/api").replace(/\/$/, "")
+const withGateway = (path: string) => `${API_BASE_URL}${path}`
+
 export interface Trajet {
   id: number
   nomTrajet: string
@@ -73,7 +76,7 @@ export const formatDuration = (duration: string): string => {
  */
 export const fetchCities = async (): Promise<City[]> => {
   try {
-    const response = await fetch("/api/trajet-cities")
+    const response = await fetch(withGateway("/trajet-cities"))
     if (!response.ok) throw new Error("Failed to fetch cities")
     return await response.json()
   } catch (error) {
@@ -307,24 +310,43 @@ export interface SubscriptionPurchaseResponse {
   type: string
   startDate: string
   endDate: string
+  active: boolean
   city: SubscriptionCity
 }
 
 /**
- * Fetch current subscription for a user (if any)
+ * Fetch all subscriptions for a user
  * GET /api/abonnements/user/{userId}
  */
-export const fetchCurrentSubscription = async (userId: number): Promise<SubscriptionPurchaseResponse | null> => {
+export const fetchUserSubscriptions = async (userId: number): Promise<SubscriptionPurchaseResponse[]> => {
   try {
     const res = await fetch(`/api/abonnements/user/${userId}`)
     if (!res.ok) {
-      // if 404 or no subscription, return null
-      return null
+      // if 404 or no subscriptions, return empty array
+      return []
     }
     const data = await res.json()
-    return data as SubscriptionPurchaseResponse
+    // Backend returns array, ensure we handle both array and single object
+    const subscriptions = Array.isArray(data) ? data : [data]
+    return subscriptions as SubscriptionPurchaseResponse[]
   } catch (error) {
-    console.error("Erreur lors de la récupération de l'abonnement de l'utilisateur:", error)
+    console.error("Erreur lors de la récupération des abonnements de l'utilisateur:", error)
+    return []
+  }
+}
+
+/**
+ * Fetch current active subscription for a user (if any)
+ * GET /api/abonnements/user/{userId} and filter for active ones
+ */
+export const fetchCurrentSubscription = async (userId: number): Promise<SubscriptionPurchaseResponse | null> => {
+  try {
+    const subscriptions = await fetchUserSubscriptions(userId)
+    // Return the first active subscription (should be only one based on backend logic)
+    const activeSubscription = subscriptions.find(sub => sub.active === true)
+    return activeSubscription || null
+  } catch (error) {
+    console.error("Erreur lors de la récupération de l'abonnement actif de l'utilisateur:", error)
     return null
   }
 }
@@ -364,6 +386,64 @@ export const purchaseSubscription = async (data: SubscriptionPurchaseRequest): P
       message: error instanceof Error ? error.message : 'Une erreur est survenue',
       subscription: null,
     }
+  }
+}
+
+// ============= PAYMENTS =============
+
+export interface PaymentIntentRequest {
+  type: 'TICKET' | 'SUBSCRIPTION'
+  referenceId: number
+  amount: number
+  userId: number
+  currency?: string
+}
+
+export interface PaymentIntentResponse {
+  id: number
+  status?: string
+  paymentUrl?: string
+  clientSecret?: string
+  amount: number
+  type: string
+  referenceId: number
+}
+
+/**
+ * Create a payment intent (used for subscriptions or tickets)
+ * POST /api/payments
+ */
+export const createPaymentIntent = async (
+  payload: PaymentIntentRequest,
+): Promise<PaymentIntentResponse> => {
+  try {
+    const requestBody = {
+      ...payload,
+      currency: payload.currency ?? 'USD',
+    }
+
+    const res = await fetch(withGateway('/payments'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody),
+    })
+
+    if (!res.ok) {
+      const errorText = await res.text()
+      let message = 'Erreur lors de la création du paiement'
+      try {
+        const parsed = JSON.parse(errorText)
+        message = parsed.message || parsed.error || message
+      } catch {
+        message = errorText || message
+      }
+      throw new Error(message)
+    }
+
+    return (await res.json()) as PaymentIntentResponse
+  } catch (error) {
+    console.error('Erreur lors de la création du paiement:', error)
+    throw error
   }
 }
 

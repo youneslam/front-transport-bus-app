@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
-import { socketService } from "@/services/socket-service"
+import { busSocketService } from "@/lib/api/buses"
 
 interface LastPosition {
   latitude: number
@@ -42,7 +42,7 @@ export function SimulateBus() {
       return
     }
     try {
-      socketService.sendLocation({
+      busSocketService.sendLocation({
         busId: Number(busId),
         latitude,
         longitude,

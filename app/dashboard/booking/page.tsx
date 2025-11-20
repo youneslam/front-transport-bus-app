@@ -7,6 +7,7 @@ import { fetchCities } from '@/lib/api/cities'
 import { fetchTrajetsByCity, fetchStationsForTrajet } from '@/lib/api/trajets'
 import { formatDuration } from '@/lib/api/utils'
 import { purchaseTicket } from '@/lib/api/tickets'
+import { createPaymentIntent } from '@/lib/api/payments'
 import type { Trajet } from '@/lib/api/trajets'
 import type { City } from '@/lib/api/cities'
 import type { Station } from '@/lib/api/trajets'
@@ -91,7 +92,7 @@ export default function BookingPage() {
   const userId = typeof window !== "undefined" ? parseInt(localStorage.getItem("userId") || "1") : 1
 
   const handlePurchase = async () => {
-    if (!selectedTrajetId || !selectedCityId) {
+    if (!selectedTrajetId || !selectedCityId || !selectedCity) {
       setPurchaseMessage({
         type: "error",
         text: "Veuillez sélectionner une ville et un trajet",
@@ -99,37 +100,63 @@ export default function BookingPage() {
       return
     }
 
-    setIsPurchasing(true)
-    setPurchaseMessage(null)
+    try {
+      setIsPurchasing(true)
+      setPurchaseMessage(null)
 
-    const result = await purchaseTicket({
-      trajetId: selectedTrajetId,
-      userId: userId,
-      seatNumber: "AUTO",
-      selectedStartTime: "",
-      cityId: selectedCityId,
-    })
-
-    setIsPurchasing(false)
-
-    if (result.success) {
-      setPurchaseMessage({
-        type: "success",
-        text: result.message,
+      const result = await purchaseTicket({
+        trajetId: selectedTrajetId,
+        userId: userId,
+        seatNumber: "AUTO",
+        selectedStartTime: "",
+        cityId: selectedCityId,
       })
-      // Reset form after success
-      setTimeout(() => {
-        setSelectedTrajetId(null)
-        setSelectedCityId(null)
-        setPurchaseMessage(null)
-        // Optionally redirect to tickets page
-        router.push("/dashboard/booking")
-      }, 2000)
-    } else {
+
+      if (!result.success || !result.ticketId) {
+        setPurchaseMessage({
+          type: "error",
+          text: result.message || "Impossible d'acheter le billet",
+        })
+        return
+      }
+
+      // Créer une intention de paiement et rediriger l'utilisateur
+      const amount = selectedCity.priceInDhs
+      try {
+        const payment = await createPaymentIntent({
+          type: "TICKET",
+          referenceId: result.ticketId,
+          amount,
+          userId,
+          currency: "USD",
+        })
+
+        if (!payment.clientSecret) {
+          throw new Error("Le service de paiement n'a pas renvoyé de clientSecret.")
+        }
+
+        const params = new URLSearchParams({
+          type: "TICKET",
+          referenceId: String(result.ticketId),
+          amount: String(amount),
+          userId: String(userId),
+          clientSecret: payment.clientSecret,
+        })
+        router.push(`/payment?${params.toString()}`)
+      } catch (paymentError) {
+        console.error("Erreur paiement ticket:", paymentError)
+        setPurchaseMessage({
+          type: "error",
+          text: "Billet créé mais la redirection vers le paiement a échoué. Veuillez réessayer ou contacter le support.",
+        })
+      }
+    } catch (error) {
       setPurchaseMessage({
         type: "error",
-        text: result.message,
+        text: error instanceof Error ? error.message : "Une erreur est survenue",
       })
+    } finally {
+      setIsPurchasing(false)
     }
   }
 

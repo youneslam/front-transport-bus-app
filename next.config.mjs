@@ -10,11 +10,11 @@ const nextConfig = {
   async rewrites() {
     return [
       {
-        source: '/api/:path*',           // toutes les requêtes commençant par /api
-        destination: 'http://localhost:4004/api/:path*', // redirection vers ton backend
+        source: '/api/:path*',
+        destination: 'http://localhost:4004/api/:path*',
       },
-    ];
+    ]
   },
-};
+}
 
-export default nextConfig;
+export default nextConfig
