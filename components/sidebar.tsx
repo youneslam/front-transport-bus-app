@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname, useRouter } from 'next/navigation'
 import { useState } from "react"
-import { LayoutDashboard, TrendingUp, Map, Ticket, CreditCard, User, LogOut, Menu, X, BarChart3, ChevronLeft, ChevronRight, Users, Bus, MapPin, Mail, Building2 } from 'lucide-react'
+import { LayoutDashboard, TrendingUp, Map, Ticket, CreditCard, User, LogOut, Menu, X, BarChart3, ChevronLeft, ChevronRight, Users, Bus, MapPin, Mail, Building2, Bell } from 'lucide-react'
 
 interface NavItem {
   label: string
@@ -43,6 +43,11 @@ export default function Sidebar({ isAdmin, userName }: { isAdmin: boolean; userN
       label: "Subscriptions",
       href: "/dashboard/subscriptions",
       icon: <CreditCard className="w-5 h-5" />,
+    },
+    {
+      label: "Notifications",
+      href: "/dashboard/notifications",
+      icon: <Bell className="w-5 h-5" />,
     },
     {
       label: "Profile",

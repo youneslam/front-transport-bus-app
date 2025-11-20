@@ -9,8 +9,13 @@ import {
 } from '@stripe/react-stripe-js'
 
 interface PaymentFormProps {
-  type: 'TICKET' | 'SUBSCRIPTION'
-  referenceId: number
+  type: 'TICKET' | 'ABONNEMENT'
+  referenceId?: number
+  cityId?: number
+  subscriptionType?: 'MONTHLY' | 'YEARLY'
+  trajetId?: number
+  trajetName?: string
+  seatNumber?: string
   amount: number
   userId: number
 }
@@ -18,6 +23,11 @@ interface PaymentFormProps {
 export default function PaymentForm({
   type,
   referenceId,
+  cityId,
+  subscriptionType,
+  trajetId,
+  trajetName,
+  seatNumber,
   amount,
   userId,
 }: PaymentFormProps) {
@@ -34,11 +44,26 @@ export default function PaymentForm({
     if (typeof window === 'undefined') return '/payment/success'
     const url = new URL('/payment/success', window.location.origin)
     url.searchParams.set('type', type)
-    url.searchParams.set('referenceId', String(referenceId))
+    
+    // For subscriptions with new flow, pass cityId and subscriptionType
+    if (type === 'ABONNEMENT' && cityId && subscriptionType) {
+      url.searchParams.set('cityId', String(cityId))
+      url.searchParams.set('subscriptionType', subscriptionType)
+    } else if (type === 'TICKET' && trajetId && cityId) {
+      // For tickets with new flow, pass trajetId, cityId, trajetName, and seatNumber
+      url.searchParams.set('trajetId', String(trajetId))
+      url.searchParams.set('cityId', String(cityId))
+      if (trajetName) url.searchParams.set('trajetName', trajetName)
+      if (seatNumber) url.searchParams.set('seatNumber', seatNumber)
+    } else if (referenceId) {
+      // For old flows, use referenceId
+      url.searchParams.set('referenceId', String(referenceId))
+    }
+    
     url.searchParams.set('amount', String(amount))
     url.searchParams.set('userId', String(userId))
     return url.toString()
-  }, [type, referenceId, amount, userId])
+  }, [type, referenceId, cityId, subscriptionType, trajetId, trajetName, seatNumber, amount, userId])
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -59,25 +84,15 @@ export default function PaymentForm({
     setIsSubmitting(true)
 
     try {
-      const result = await stripe.confirmPayment({
+      const { error: submitError } = await stripe.confirmPayment({
         elements,
         confirmParams: {
           return_url: confirmationUrl,
         },
-        redirect: 'if_required',
       })
 
-      if (result.error) {
-        setError(result.error.message || 'Le paiement a échoué.')
-      } else if (result.paymentIntent && result.paymentIntent.status === 'succeeded') {
-        setSuccessMessage('Paiement effectué avec succès.')
-        router.replace(
-          `/payment/success?type=${type}&referenceId=${referenceId}`,
-        )
-      } else {
-        setSuccessMessage(
-          "Votre paiement est en cours de validation. Vous serez redirigé une fois terminé.",
-        )
+      if (submitError) {
+        setError(submitError.message || 'Le paiement a échoué.')
       }
     } catch (err) {
       console.error('Erreur lors de la confirmation du paiement:', err)

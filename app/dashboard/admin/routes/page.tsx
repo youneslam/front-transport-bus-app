@@ -108,6 +108,7 @@ export default function AdminTrajetsPage() {
   const [stationIds, setStationIds] = useState<number[]>([])
   const [stationDurations, setStationDurations] = useState<number[]>([]) // length = stationIds.length (we use first n-1 durations)
   const [startTimes, setStartTimes] = useState<string[]>([])
+  const [startTimesText, setStartTimesText] = useState("") // Text input for start times
   const [dureeEstimee, setDureeEstimee] = useState("PT30M")
 
   const filteredStations = useMemo(() => {
@@ -146,6 +147,7 @@ export default function AdminTrajetsPage() {
     setStationIds([])
     setStationDurations([])
     setStartTimes([])
+    setStartTimesText("")
     setDureeEstimee("PT30M")
   }
 
@@ -205,6 +207,7 @@ export default function AdminTrajetsPage() {
     setDestination(t.destination)
     setCityId(t.cityId)
     setStartTimes(t.startTimes ?? [])
+    setStartTimesText((t.startTimes ?? []).join(", "))
     setDureeEstimee(t.dureeEstimee ?? "PT30M")
     // If API returns stationIds/durations in trajet, use them; otherwise set empty
     // Type assertions because Trajet interface earlier didn't include stationIds/durations — but your backend returns them for editing.
@@ -333,9 +336,14 @@ export default function AdminTrajetsPage() {
         return
       }
 
-      // Format startTimes to ensure HH:MM format
-      const formattedStartTimes = startTimes
+      // Parse start times from text input first
+      const parsedStartTimes = startTimesText
+        .split(",")
+        .map(s => s.trim())
         .filter(Boolean)
+
+      // Format startTimes to ensure HH:MM format
+      const formattedStartTimes = parsedStartTimes
         .map(t => {
           const trimmed = t.trim()
           const parts = trimmed.split(":")
@@ -871,12 +879,12 @@ export default function AdminTrajetsPage() {
                   <Input
                     id="startTimes"
                     placeholder="09:00, 13:00, 17:30 (séparés par des virgules)"
-                    value={startTimes.join(", ")}
-                    onChange={(e) => {
-                      const times = e.target.value.split(",").map(s => s.trim()).filter(Boolean)
-                      // Format times to HH:MM (ensure 2 digits for hours)
+                    value={startTimesText}
+                    onChange={(e) => setStartTimesText(e.target.value)}
+                    onBlur={() => {
+                      // Parse and format times on blur
+                      const times = startTimesText.split(",").map(s => s.trim()).filter(Boolean)
                       const formattedTimes = times.map(time => {
-                        // If time is like "9:00", convert to "09:00"
                         const parts = time.split(":")
                         if (parts.length === 2) {
                           const hours = parts[0].padStart(2, "0")
@@ -886,6 +894,7 @@ export default function AdminTrajetsPage() {
                         return time
                       })
                       setStartTimes(formattedTimes)
+                      setStartTimesText(formattedTimes.join(", "))
                     }}
                   />
                   <p className="text-xs text-muted-foreground">

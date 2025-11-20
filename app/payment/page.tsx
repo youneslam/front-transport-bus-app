@@ -19,33 +19,64 @@ export default function PaymentPage() {
   const referenceIdParam = searchParams.get("referenceId")
   const amountParam = searchParams.get("amount")
   const userIdParam = searchParams.get("userId")
-  const providedClientSecret = searchParams.get("clientSecret")
+  
+  // New subscription flow params
+  const cityIdParam = searchParams.get("cityId")
+  const subscriptionTypeParam = searchParams.get("subscriptionType")
+  
+  // New ticket flow params
+  const trajetIdParam = searchParams.get("trajetId")
+  const trajetNameParam = searchParams.get("trajetName")
+  const seatNumberParam = searchParams.get("seatNumber")
 
   const normalizedType = useMemo(() => {
     if (!typeParam) return null
-    return typeParam === "ABONNEMENT" ? "SUBSCRIPTION" : typeParam
+    // Keep ABONNEMENT as-is for backend, only normalize for display
+    return typeParam
   }, [typeParam])
 
-  const [clientSecret, setClientSecret] = useState<string | null>(providedClientSecret)
-  const [loading, setLoading] = useState(!providedClientSecret)
+  const [clientSecret, setClientSecret] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (clientSecret || providedClientSecret) {
+    if (clientSecret) {
       setLoading(false)
       return
     }
 
-    const hasAllParams =
-      normalizedType &&
-      referenceIdParam &&
-      amountParam &&
-      userIdParam &&
-      !Number.isNaN(Number(referenceIdParam)) &&
-      !Number.isNaN(Number(amountParam)) &&
-      !Number.isNaN(Number(userIdParam))
+    // Different params required based on payment type
+    const isSubscription = normalizedType === "ABONNEMENT"
+    const isTicket = normalizedType === "TICKET"
+    
+    const hasRequiredParams = isSubscription
+      ? normalizedType &&
+        cityIdParam &&
+        subscriptionTypeParam &&
+        amountParam &&
+        userIdParam &&
+        !Number.isNaN(Number(cityIdParam)) &&
+        !Number.isNaN(Number(amountParam)) &&
+        !Number.isNaN(Number(userIdParam))
+      : isTicket && trajetIdParam
+      ? normalizedType &&
+        trajetIdParam &&
+        cityIdParam &&
+        amountParam &&
+        userIdParam &&
+        !Number.isNaN(Number(trajetIdParam)) &&
+        !Number.isNaN(Number(cityIdParam)) &&
+        !Number.isNaN(Number(amountParam)) &&
+        !Number.isNaN(Number(userIdParam))
+      : normalizedType &&
+        referenceIdParam &&
+        amountParam &&
+        userIdParam &&
+        !Number.isNaN(Number(referenceIdParam)) &&
+        !Number.isNaN(Number(amountParam)) &&
+        !Number.isNaN(Number(userIdParam))
 
-    if (!hasAllParams) {
+    if (!hasRequiredParams) {
       setLoading(false)
       setError("Paramètres de paiement invalides.")
       return
@@ -62,9 +93,14 @@ export default function PaymentPage() {
         setLoading(true)
         setError(null)
 
+        // For subscriptions and tickets without referenceId yet, use 0 as placeholder
+        const isSubscription = normalizedType === "ABONNEMENT"
+        const isTicket = normalizedType === "TICKET" && trajetIdParam
+        const refId = (isSubscription || isTicket) && !referenceIdParam ? 0 : Number(referenceIdParam)
+
         const payment = await createPaymentIntent({
-          type: normalizedType as "TICKET" | "SUBSCRIPTION",
-          referenceId: Number(referenceIdParam),
+          type: normalizedType as "TICKET" | "ABONNEMENT",
+          referenceId: refId,
           amount: Number(amountParam),
           userId: Number(userIdParam),
           currency: "USD",
@@ -86,9 +122,12 @@ export default function PaymentPage() {
     }
 
     void initializePayment()
-  }, [normalizedType, referenceIdParam, amountParam, userIdParam, clientSecret, providedClientSecret])
+  }, [normalizedType, referenceIdParam, amountParam, userIdParam, cityIdParam, subscriptionTypeParam, trajetIdParam, seatNumberParam, clientSecret])
 
   const formattedAmount = amountParam ? Number(amountParam).toFixed(2) : "0.00"
+  
+  // Display reference ID or type description for items without ID yet
+  const displayReference = referenceIdParam || (subscriptionTypeParam ? `${subscriptionTypeParam}` : trajetNameParam ? `${trajetNameParam}` : "Nouveau")
 
   return (
     <div className="min-h-screen bg-muted/30 py-12 px-4 sm:px-6 lg:px-8">
@@ -105,7 +144,11 @@ export default function PaymentPage() {
               Paiement sécurisé
             </p>
             <h1 className="mt-3 text-3xl font-semibold text-foreground">
-              {normalizedType === "SUBSCRIPTION" ? "Abonnement" : "Billet"} #{referenceIdParam}
+              {normalizedType === "ABONNEMENT" 
+                ? `Abonnement ${displayReference ? `#${displayReference}` : ""}` 
+                : trajetNameParam 
+                  ? `Billet de Trajet ${displayReference}` 
+                  : `Billet ${displayReference ? `#${displayReference}` : ""}`}
             </h1>
           </div>
 
@@ -119,7 +162,11 @@ export default function PaymentPage() {
                 </span>
               </div>
               <p className="mt-2 text-sm text-muted-foreground">
-                Transaction liée au {normalizedType === "SUBSCRIPTION" ? "abonnement" : "ticket"} #{referenceIdParam}
+                {normalizedType === "ABONNEMENT" 
+                  ? `Transaction liée à l'abonnement ${displayReference ? `#${displayReference}` : ""}`
+                  : trajetNameParam
+                    ? `Ticket de Trajet ${displayReference}`
+                    : `Transaction liée au ticket ${displayReference ? `#${displayReference}` : ""}`}
               </p>
             </div>
 
@@ -141,8 +188,13 @@ export default function PaymentPage() {
             {!loading && !error && clientSecret && stripePromise && (
               <Elements stripe={stripePromise} options={{ clientSecret }} key={clientSecret}>
                 <PaymentForm
-                  type={normalizedType as "TICKET" | "SUBSCRIPTION"}
-                  referenceId={Number(referenceIdParam)}
+                  type={normalizedType as "TICKET" | "ABONNEMENT"}
+                  referenceId={referenceIdParam ? Number(referenceIdParam) : undefined}
+                  cityId={cityIdParam ? Number(cityIdParam) : undefined}
+                  subscriptionType={subscriptionTypeParam as "MONTHLY" | "YEARLY" | undefined}
+                  trajetId={trajetIdParam ? Number(trajetIdParam) : undefined}
+                  trajetName={trajetNameParam || undefined}
+                  seatNumber={seatNumberParam || undefined}
                   amount={Number(amountParam)}
                   userId={Number(userIdParam)}
                 />

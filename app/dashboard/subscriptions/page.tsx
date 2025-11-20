@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react"
 import { useRouter } from 'next/navigation'
-import { Check } from 'lucide-react'
+import { Check, X } from 'lucide-react'
 import {
   fetchSubscriptionCities,
   fetchSubscriptionForCity,
@@ -10,9 +10,20 @@ import {
   purchaseSubscription,
   SubscriptionPurchaseResponse,
   fetchCurrentSubscription,
+  cancelSubscription,
 } from '@/lib/api/subscriptions'
-import { createPaymentIntent } from '@/lib/api/payments'
 import { useToast } from '@/hooks/use-toast'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 
 function daysBetween(a: Date, b: Date) {
   const diff = b.getTime() - a.getTime()
@@ -125,52 +136,48 @@ export default function SubscriptionsPage() {
     try {
       setIsPurchasing(true)
       const userId = typeof window !== 'undefined' ? Number(localStorage.getItem('userId') || '1') : 1
-      const res = await purchaseSubscription({ userId, cityId: selectedCity.id, type })
-      if (res.success && res.subscription) {
-        setCurrentSubscription(res.subscription)
-        toast({
-          title: 'Succès',
-          description: `Abonnement ${type === 'MONTHLY' ? 'mensuel' : 'annuel'} créé et activé. Les anciens abonnements ont été désactivés.`,
-        })
-
-        // Initier le paiement après la création de l'abonnement
-        const amount = type === 'MONTHLY' ? selectedCity.monthlyPriceNormal : selectedCity.yearlyPriceNormal
-        try {
-        const payment = await createPaymentIntent({
-          type: 'SUBSCRIPTION',
-          referenceId: res.subscription.id,
-          amount,
-          userId,
-          currency: 'USD',
-        })
-
-        if (!payment.clientSecret) {
-          throw new Error("Le service de paiement n'a pas renvoyé de clientSecret.")
-        }
-
-        const params = new URLSearchParams({
-          type: 'SUBSCRIPTION',
-          referenceId: String(res.subscription.id),
-          amount: String(amount),
-          userId: String(userId),
-          clientSecret: payment.clientSecret,
-        })
-        router.push(`/payment?${params.toString()}`)
-        } catch (paymentError) {
-          console.error('Erreur lors de la création du paiement:', paymentError)
-          toast({
-          title: 'Paiement indisponible',
-          description: "L'abonnement est créé mais la redirection vers le paiement a échoué. Merci de réessayer ou de contacter le support.",
-            variant: 'destructive',
-          })
-        }
-      } else {
-        toast({ title: 'Erreur', description: res.message || 'Erreur inconnue' })
-      }
+      
+      // Redirect to payment page WITHOUT creating subscription yet
+      // The subscription will be created after successful payment
+      const amount = type === 'MONTHLY' ? selectedCity.monthlyPriceNormal : selectedCity.yearlyPriceNormal
+      const params = new URLSearchParams({
+        type: 'ABONNEMENT',
+        cityId: String(selectedCity.id),
+        subscriptionType: type,
+        amount: String(amount),
+        userId: String(userId),
+      })
+      router.push(`/payment?${params.toString()}`)
     } catch (e) {
-      toast({ title: 'Erreur', description: 'Impossible de créer l\'abonnement' })
+      toast({ title: 'Erreur', description: 'Impossible de procéder au paiement' })
     } finally {
       setIsPurchasing(false)
+    }
+  }
+
+  const handleCancelSubscription = async () => {
+    if (!currentSubscription) return
+    try {
+      const res = await cancelSubscription(currentSubscription.id)
+      if (res.success) {
+        setCurrentSubscription(null)
+        toast({
+          title: 'Succès',
+          description: 'Votre abonnement a été annulé avec succès.',
+        })
+      } else {
+        toast({
+          title: 'Erreur',
+          description: res.message || 'Impossible d\'annuler l\'abonnement',
+          variant: 'destructive',
+        })
+      }
+    } catch (e) {
+      toast({
+        title: 'Erreur',
+        description: 'Une erreur est survenue lors de l\'annulation',
+        variant: 'destructive',
+      })
     }
   }
 
@@ -252,9 +259,36 @@ export default function SubscriptionsPage() {
                 })()}
               </div>
 
-              <div className="p-3 bg-primary/5 rounded-lg border border-primary/10 text-sm text-foreground">
+              <div className="p-3 bg-primary/5 rounded-lg border border-primary/10 text-sm text-foreground mb-4">
                 <span className="font-semibold text-primary">✓ Abonnement actif</span> — Vous pouvez voyager en illimité
               </div>
+
+              {/* Cancel Button with Confirmation */}
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <button className="w-full mt-2 py-2.5 px-4 bg-destructive/10 hover:bg-destructive/20 text-destructive rounded-lg font-medium transition-colors flex items-center justify-center gap-2">
+                    <X className="w-4 h-4" />
+                    Annuler l'abonnement
+                  </button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Confirmer l'annulation</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Êtes-vous sûr de vouloir annuler votre abonnement ? Cette action est irréversible et vous perdrez l'accès aux avantages de l'abonnement.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Non, garder mon abonnement</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={handleCancelSubscription}
+                      className="bg-destructive hover:bg-destructive/90"
+                    >
+                      Oui, annuler l'abonnement
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </div>
           </div>
         </div>

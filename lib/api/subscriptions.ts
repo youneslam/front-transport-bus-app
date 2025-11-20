@@ -23,6 +23,7 @@ export {
   fetchUserSubscriptions,
   fetchCurrentSubscription,
   purchaseSubscription,
+  cancelSubscription,
   createPaymentIntent,
 } from "../api"
 

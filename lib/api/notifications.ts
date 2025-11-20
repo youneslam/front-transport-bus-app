@@ -18,14 +18,12 @@ export interface Notification {
 
 export interface AbonnementNotification {
   id: number
+  abonnementId: number
   userId: number
-  userName: string
-  cityId?: number
-  cityName?: string
-  type?: string
-  priceInDhs?: number
-  createdAt?: string
-  message?: string
+  type: string
+  startDate: string
+  endDate: string
+  receivedAt: string
 }
 
 async function handleJsonResponse<T>(res: Response): Promise<T> {

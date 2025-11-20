@@ -13,12 +13,22 @@ import {
   type Notification,
   type AbonnementNotification,
 } from "@/lib/api/notifications"
+import { listUsers } from "@/lib/api/auth"
+import { fetchCities } from "@/lib/api/cities"
+import { fetchUserSubscriptions } from "@/lib/api/subscriptions"
+
+// Enriched type for display
+interface EnrichedAbonnementNotification extends AbonnementNotification {
+  userName?: string
+  cityName?: string
+  priceInDhs?: number
+}
 
 export default function AdminNotificationsPage() {
   const router = useRouter()
   const { toast } = useToast()
   const [ticketNotifications, setTicketNotifications] = useState<Notification[]>([])
-  const [subscriptionNotifications, setSubscriptionNotifications] = useState<AbonnementNotification[]>([])
+  const [subscriptionNotifications, setSubscriptionNotifications] = useState<EnrichedAbonnementNotification[]>([])
   const [loadingTickets, setLoadingTickets] = useState(false)
   const [loadingSubs, setLoadingSubs] = useState(false)
 
@@ -50,8 +60,63 @@ export default function AdminNotificationsPage() {
     const loadSubs = async () => {
       setLoadingSubs(true)
       try {
-        const data = await listAbonnementNotifications()
-        setSubscriptionNotifications(data)
+        const [notifications, users] = await Promise.all([
+          listAbonnementNotifications(),
+          listUsers(true) // Force refresh to get latest users
+        ])
+
+        console.log('Subscription notifications:', notifications)
+        console.log('Users:', users)
+
+        // Fetch all user subscriptions
+        const userIds = [...new Set(notifications.map(n => n.userId))]
+        const allSubscriptionsPromises = userIds.map(userId => 
+          fetchUserSubscriptions(userId).catch((err) => {
+            console.error(`Error fetching subscriptions for user ${userId}:`, err)
+            return []
+          })
+        )
+        const allSubscriptionsArrays = await Promise.all(allSubscriptionsPromises)
+        const allSubscriptions = allSubscriptionsArrays.flat()
+
+        console.log('All subscriptions:', allSubscriptions)
+
+        // Enrich notifications with user, city, and subscription data
+        const enriched: EnrichedAbonnementNotification[] = notifications.map((notif) => {
+          // Find user by id, username, or nom
+          const user = users.find((u) => u.id === notif.userId)
+          const subscription = allSubscriptions.find((s) => s.id === notif.abonnementId)
+          
+          console.log(`Notification ${notif.id}:`, {
+            userId: notif.userId,
+            abonnementId: notif.abonnementId,
+            foundUser: user,
+            foundSubscription: subscription,
+            cityObject: subscription?.city
+          })
+          
+          // Get username from various possible fields
+          const userName = user?.username || user?.nom || user?.name || `User #${notif.userId}`
+          
+          // Subscription response has nested city object - try multiple field names
+          const city = subscription?.city
+          const cityName = city?.cityName || city?.nom || city?.name || city?.ville
+          const priceInDhs = subscription
+            ? subscription.type === 'MONTHLY'
+              ? city?.monthlyPriceNormal
+              : city?.yearlyPriceNormal
+            : undefined
+
+          return {
+            ...notif,
+            userName,
+            cityName,
+            priceInDhs,
+          }
+        })
+
+        console.log('Enriched notifications:', enriched)
+        setSubscriptionNotifications(enriched)
       } catch (err) {
         console.error(err)
         toast({
@@ -182,16 +247,24 @@ export default function AdminNotificationsPage() {
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2">
                         <UserIcon className="w-4 h-4 text-muted-foreground" />
-                        <span className="font-medium text-foreground">{notif.userName}</span>
+                        <span className="font-medium text-foreground">{notif.userName || "—"}</span>
                       </div>
                     </td>
                     <td className="py-3 px-4">
-                      <Badge variant="outline" className="flex items-center gap-1 w-fit">
-                        <MapPin className="w-3 h-3" />
-                        {notif.cityName ?? "—"}
+                      {notif.cityName ? (
+                        <Badge variant="outline" className="flex items-center gap-1 w-fit">
+                          <MapPin className="w-3 h-3" />
+                          {notif.cityName}
+                        </Badge>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4">
+                      <Badge variant={notif.type === "MONTHLY" ? "default" : "secondary"}>
+                        {notif.type === "MONTHLY" ? "Mensuel" : notif.type === "YEARLY" ? "Annuel" : notif.type}
                       </Badge>
                     </td>
-                    <td className="py-3 px-4 text-sm text-foreground">{notif.type ?? "—"}</td>
                     <td className="py-3 px-4 text-right">
                       {typeof notif.priceInDhs === "number" ? (
                         <span className="inline-flex items-center gap-1 text-sm font-semibold text-foreground">
@@ -203,7 +276,10 @@ export default function AdminNotificationsPage() {
                       )}
                     </td>
                     <td className="py-3 px-4 text-sm text-muted-foreground">
-                      {notif.createdAt ? new Date(notif.createdAt).toLocaleString("fr-FR") : "—"}
+                      <div className="flex items-center gap-2">
+                        <Clock className="w-4 h-4" />
+                        {notif.receivedAt ? new Date(notif.receivedAt).toLocaleString("fr-FR") : "—"}
+                      </div>
                     </td>
                     <td className="py-3 px-4 text-center">
                       <Button variant="ghost" size="icon" className="h-8 w-8">

@@ -2,12 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from 'next/navigation'
-import { MapPin, TrendingUp, DollarSign } from 'lucide-react'
+import { MapPin, TrendingUp, DollarSign, Download } from 'lucide-react'
 import { fetchUserTickets, UserTicket } from '@/lib/api/user-tickets'
 import { fetchAllTrajets, Trajet } from '@/lib/api/trajets'
 import { fetchCities, City } from '@/lib/api/cities'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import QRCodeGenerator from '@/components/QRCodeGenerator'
 
 export default function TripsPage() {
   const router = useRouter()
@@ -49,6 +50,9 @@ export default function TripsPage() {
 
   const filtered = useMemo(() => {
     return tickets.filter(t => {
+      // Only show valid/activated tickets
+      if (!t.valid) return false
+
       const created = new Date(t.createdAt)
       if (date) {
         const start = new Date(date)
@@ -66,6 +70,9 @@ export default function TripsPage() {
       }
 
       return true
+    }).sort((a, b) => {
+      // Sort by createdAt in descending order (newest first)
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     })
   }, [tickets, date, search, trajets])
 
@@ -238,8 +245,10 @@ export default function TripsPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2">
             <h2 className="text-xl font-bold text-foreground mb-4">Recent Tickets</h2>
-            <div className="space-y-4">
-              {filtered.map((t) => (
+            <div className="space-y-4 p-2 max-h-[600px] overflow-y-auto pr-2">
+              {filtered.map((t) => {
+                const trajet = trajets.find((tr) => tr.id === t.ticketId)
+                return (
                 <div
                   key={t.id}
                   onClick={() => setSelectedTicket(t)}
@@ -249,9 +258,10 @@ export default function TripsPage() {
                     <div>
                       <div className="flex items-center gap-3">
                         <MapPin className="w-5 h-5 text-primary" />
-                        <span className="font-semibold text-foreground">Ticket #{t.ticketId}</span>
+                        <span className="font-semibold text-foreground">Ticket #{t.id}</span>
                       </div>
-                      <div className="text-sm text-muted-foreground mt-1">{t.userName}</div>
+                      <div className="text-sm font-medium text-foreground mt-1">{trajet?.nomTrajet || 'Unknown Route'}</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">{t.userName}</div>
                     </div>
 
                     <div className="text-right">
@@ -262,7 +272,8 @@ export default function TripsPage() {
 
                   {t.validatedAt && <p className="text-sm text-muted-foreground">Validated at: {new Date(t.validatedAt).toLocaleString()}</p>}
                 </div>
-              ))}
+                )
+              })}
               {filtered.length === 0 && (
                 <div className="text-center text-muted-foreground py-8">No tickets found for the selected filters.</div>
               )}
@@ -274,8 +285,15 @@ export default function TripsPage() {
               <h3 className="text-lg font-bold text-foreground mb-4">Ticket Details</h3>
               <div className="space-y-3">
                 <div>
-                  <p className="text-xs text-muted-foreground font-semibold uppercase">Ticket ID</p>
-                  <p className="text-foreground font-semibold mt-1">#{selectedTicket.ticketId}</p>
+                  <p className="text-xs text-muted-foreground font-semibold uppercase">Achat ID</p>
+                  <p className="text-foreground font-semibold mt-1">#{selectedTicket.id}</p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground font-semibold uppercase">Trajet</p>
+                  <p className="text-foreground font-semibold mt-1">
+                    {trajets.find((tr) => tr.id === selectedTicket.ticketId)?.nomTrajet || 'Unknown Route'}
+                  </p>
                 </div>
 
                 <div>
@@ -300,9 +318,11 @@ export default function TripsPage() {
                   </div>
                 )}
 
-                <button className="w-full mt-4 bg-primary text-primary-foreground py-2 rounded-lg hover:bg-primary/90 transition-colors font-medium">
-                  Rebook
-                </button>
+                {/* QR Code Section */}
+                <div className="border-t border-border pt-4 mt-4">
+                  <p className="text-xs text-muted-foreground font-semibold uppercase mb-3">QR Code</p>
+                  <QRCodeGenerator achatId={selectedTicket.id} size={180} />
+                </div>
               </div>
             </div>
           )}

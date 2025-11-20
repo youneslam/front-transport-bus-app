@@ -337,14 +337,20 @@ export const fetchUserSubscriptions = async (userId: number): Promise<Subscripti
 
 /**
  * Fetch current active subscription for a user (if any)
- * GET /api/abonnements/user/{userId} and filter for active ones
+ * GET /api/abonnements/user/{userId}/current
  */
 export const fetchCurrentSubscription = async (userId: number): Promise<SubscriptionPurchaseResponse | null> => {
   try {
-    const subscriptions = await fetchUserSubscriptions(userId)
-    // Return the first active subscription (should be only one based on backend logic)
-    const activeSubscription = subscriptions.find(sub => sub.active === true)
-    return activeSubscription || null
+    const res = await fetch(`/api/abonnements/user/${userId}/current`)
+    if (!res.ok) {
+      // if 404, user has no active subscription
+      if (res.status === 404) {
+        return null
+      }
+      throw new Error(`HTTP ${res.status}`)
+    }
+    const subscription = await res.json()
+    return subscription as SubscriptionPurchaseResponse
   } catch (error) {
     console.error("Erreur lors de la récupération de l'abonnement actif de l'utilisateur:", error)
     return null
@@ -389,10 +395,41 @@ export const purchaseSubscription = async (data: SubscriptionPurchaseRequest): P
   }
 }
 
+/**
+ * Cancel a subscription
+ * DELETE /api/abonnements/{id}
+ */
+export const cancelSubscription = async (subscriptionId: number): Promise<{
+  success: boolean
+  message: string
+}> => {
+  try {
+    const res = await fetch(`/api/abonnements/${subscriptionId}`, {
+      method: 'DELETE',
+    })
+
+    if (!res.ok) {
+      const err = await res.text().catch(() => 'Erreur lors de l\'annulation de l\'abonnement')
+      throw new Error(err)
+    }
+
+    return {
+      success: true,
+      message: 'Abonnement annulé avec succès',
+    }
+  } catch (error) {
+    console.error('Erreur lors de l\'annulation de l\'abonnement:', error)
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'Une erreur est survenue',
+    }
+  }
+}
+
 // ============= PAYMENTS =============
 
 export interface PaymentIntentRequest {
-  type: 'TICKET' | 'SUBSCRIPTION'
+  type: 'TICKET' | 'ABONNEMENT'
   referenceId: number
   amount: number
   userId: number

@@ -7,7 +7,6 @@ import { fetchCities } from '@/lib/api/cities'
 import { fetchTrajetsByCity, fetchStationsForTrajet } from '@/lib/api/trajets'
 import { formatDuration } from '@/lib/api/utils'
 import { purchaseTicket } from '@/lib/api/tickets'
-import { createPaymentIntent } from '@/lib/api/payments'
 import type { Trajet } from '@/lib/api/trajets'
 import type { City } from '@/lib/api/cities'
 import type { Station } from '@/lib/api/trajets'
@@ -104,52 +103,19 @@ export default function BookingPage() {
       setIsPurchasing(true)
       setPurchaseMessage(null)
 
-      const result = await purchaseTicket({
-        trajetId: selectedTrajetId,
-        userId: userId,
-        seatNumber: "AUTO",
-        selectedStartTime: "",
-        cityId: selectedCityId,
-      })
-
-      if (!result.success || !result.ticketId) {
-        setPurchaseMessage({
-          type: "error",
-          text: result.message || "Impossible d'acheter le billet",
-        })
-        return
-      }
-
-      // Créer une intention de paiement et rediriger l'utilisateur
+      // Redirect to payment page WITHOUT creating ticket yet
+      // The ticket will be created after successful payment
       const amount = selectedCity.priceInDhs
-      try {
-        const payment = await createPaymentIntent({
-          type: "TICKET",
-          referenceId: result.ticketId,
-          amount,
-          userId,
-          currency: "USD",
-        })
-
-        if (!payment.clientSecret) {
-          throw new Error("Le service de paiement n'a pas renvoyé de clientSecret.")
-        }
-
-        const params = new URLSearchParams({
-          type: "TICKET",
-          referenceId: String(result.ticketId),
-          amount: String(amount),
-          userId: String(userId),
-          clientSecret: payment.clientSecret,
-        })
-        router.push(`/payment?${params.toString()}`)
-      } catch (paymentError) {
-        console.error("Erreur paiement ticket:", paymentError)
-        setPurchaseMessage({
-          type: "error",
-          text: "Billet créé mais la redirection vers le paiement a échoué. Veuillez réessayer ou contacter le support.",
-        })
-      }
+      const params = new URLSearchParams({
+        type: "TICKET",
+        trajetId: String(selectedTrajetId),
+        trajetName: selectedTrajet?.nomTrajet || "Trajet",
+        cityId: String(selectedCityId),
+        seatNumber: "AUTO",
+        amount: String(amount),
+        userId: String(userId),
+      })
+      router.push(`/payment?${params.toString()}`)
     } catch (error) {
       setPurchaseMessage({
         type: "error",
