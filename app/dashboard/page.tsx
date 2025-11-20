@@ -2,11 +2,23 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from 'next/navigation'
-import { ArrowUpRight, TrendingUp, Zap, Award } from 'lucide-react'
+import { ArrowUpRight, TrendingUp, Zap, Award, MapPin, Bus, Ticket } from 'lucide-react'
+import { fetchUserTickets } from '@/lib/api/user-tickets'
+import { fetchCurrentSubscription } from '@/lib/api/subscriptions'
+import { listTrajets, fetchCities } from '@/lib/api'
+import type { UserTicket } from '@/lib/api/user-tickets'
+import type { SubscriptionPurchaseResponse } from '@/lib/api/subscriptions'
 
 export default function DashboardPage() {
   const router = useRouter()
   const [userName, setUserName] = useState("")
+  const [loading, setLoading] = useState(true)
+  const [totalTickets, setTotalTickets] = useState(0)
+  const [ticketsThisMonth, setTicketsThisMonth] = useState(0)
+  const [activeSubscription, setActiveSubscription] = useState<SubscriptionPurchaseResponse | null>(null)
+  const [daysRemaining, setDaysRemaining] = useState(0)
+  const [totalRoutes, setTotalRoutes] = useState(0)
+  const [totalCities, setTotalCities] = useState(0)
 
   useEffect(() => {
     const token = localStorage.getItem("authToken")
@@ -25,6 +37,55 @@ export default function DashboardPage() {
     }
 
     setUserName(name || "User")
+
+    // Load user dashboard data
+    const loadDashboardData = async () => {
+      const userId = localStorage.getItem("userId")
+      if (!userId) return
+
+      try {
+        setLoading(true)
+        
+        // Fetch user tickets
+        const tickets = await fetchUserTickets(parseInt(userId))
+        setTotalTickets(tickets.length)
+
+        // Count tickets from this month
+        const now = new Date()
+        const thisMonth = tickets.filter(ticket => {
+          const ticketDate = new Date(ticket.createdAt)
+          return ticketDate.getMonth() === now.getMonth() && ticketDate.getFullYear() === now.getFullYear()
+        }).length
+        setTicketsThisMonth(thisMonth)
+
+        // Fetch active subscription
+        const subscription = await fetchCurrentSubscription(parseInt(userId))
+        setActiveSubscription(subscription)
+
+        if (subscription) {
+          // Calculate days remaining
+          const endDate = new Date(subscription.endDate)
+          const today = new Date()
+          const diffTime = endDate.getTime() - today.getTime()
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+          setDaysRemaining(diffDays > 0 ? diffDays : 0)
+        }
+
+        // Fetch routes and cities
+        const [routes, cities] = await Promise.all([
+          listTrajets(),
+          fetchCities()
+        ])
+        setTotalRoutes(routes.length)
+        setTotalCities(cities.length)
+      } catch (error) {
+        console.error('Error loading dashboard data:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadDashboardData()
   }, [router])
 
   return (
@@ -40,20 +101,26 @@ export default function DashboardPage() {
         <div className="stat-card rounded-xl">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-sm text-muted-foreground font-medium">Total Trips</p>
-              <p className="text-3xl font-bold text-primary mt-2">24</p>
-              <p className="text-xs text-muted-foreground mt-2">5 trips this month</p>
+              <p className="text-sm text-muted-foreground font-medium">Mes Billets</p>
+              <p className="text-3xl font-bold text-primary mt-2">{loading ? "..." : totalTickets}</p>
+              <p className="text-xs text-muted-foreground mt-2">{ticketsThisMonth} achetés ce mois</p>
             </div>
-            <TrendingUp className="w-6 h-6 text-primary/40" />
+            <Ticket className="w-6 h-6 text-primary/40" />
           </div>
         </div>
 
         <div className="stat-card rounded-xl">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-sm text-muted-foreground font-medium">Active Pass</p>
-              <p className="text-2xl font-bold text-accent mt-2">Monthly Pass</p>
-              <p className="text-xs text-muted-foreground mt-2">18 days remaining</p>
+              <p className="text-sm text-muted-foreground font-medium">Abonnement</p>
+              <p className="text-2xl font-bold text-accent mt-2">
+                {loading ? "..." : activeSubscription ? (
+                  activeSubscription.type === 'MONTHLY' ? 'Mensuel' : 'Annuel'
+                ) : 'Aucun'}
+              </p>
+              <p className="text-xs text-muted-foreground mt-2">
+                {activeSubscription ? `${daysRemaining} jours restants` : 'Pas d\'abonnement actif'}
+              </p>
             </div>
             <Zap className="w-6 h-6 text-accent/40" />
           </div>
@@ -62,22 +129,22 @@ export default function DashboardPage() {
         <div className="stat-card rounded-xl">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-sm text-muted-foreground font-medium">Amount Saved</p>
-              <p className="text-3xl font-bold text-primary mt-2">$247</p>
-              <p className="text-xs text-muted-foreground mt-2">vs single tickets</p>
+              <p className="text-sm text-muted-foreground font-medium">Routes Disponibles</p>
+              <p className="text-3xl font-bold text-primary mt-2">{loading ? "..." : totalRoutes}</p>
+              <p className="text-xs text-muted-foreground mt-2">Lignes de bus actives</p>
             </div>
-            <ArrowUpRight className="w-6 h-6 text-primary/40" />
+            <Bus className="w-6 h-6 text-primary/40" />
           </div>
         </div>
 
         <div className="stat-card rounded-xl">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-sm text-muted-foreground font-medium">Reward Points</p>
-              <p className="text-3xl font-bold text-accent mt-2">1,250</p>
-              <p className="text-xs text-muted-foreground mt-2">Redeemable</p>
+              <p className="text-sm text-muted-foreground font-medium">Villes Desservies</p>
+              <p className="text-3xl font-bold text-accent mt-2">{loading ? "..." : totalCities}</p>
+              <p className="text-xs text-muted-foreground mt-2">Destinations disponibles</p>
             </div>
-            <Award className="w-6 h-6 text-accent/40" />
+            <MapPin className="w-6 h-6 text-accent/40" />
           </div>
         </div>
       </div>

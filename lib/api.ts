@@ -496,6 +496,21 @@ export interface UserTicket {
   validatedAt: string | null
 }
 
+export interface Achat {
+  id: number
+  ticketId: number
+  userId: number
+  seatNumber: string
+  selectedStartTime: string
+  purchaseDate: string
+  isValid: boolean
+  cityId: number
+  trajetId?: number
+  priceInDhs?: number
+  cityName?: string
+  nomTrajet?: string
+}
+
 /**
  * Fetch tickets purchased by a user
  * Endpoint: GET /api/tickets/achats/users/{userId}
@@ -511,6 +526,25 @@ export const fetchUserTickets = async (userId: number): Promise<UserTicket[]> =>
     return data as UserTicket[]
   } catch (error) {
     console.error('Erreur lors de la récupération des tickets utilisateur:', error)
+    return []
+  }
+}
+
+/**
+ * Fetch all ticket purchases (achats)
+ * Endpoint: GET /api/tickets/achats
+ */
+export const listAchats = async (): Promise<Achat[]> => {
+  try {
+    const res = await fetch('/api/tickets/achats')
+    if (!res.ok) {
+      const err = await res.text().catch(() => 'Failed to fetch achats')
+      throw new Error(err || 'Failed to fetch achats')
+    }
+    const data = await res.json()
+    return data as Achat[]
+  } catch (error) {
+    console.error('Erreur lors de la récupération des achats:', error)
     return []
   }
 }

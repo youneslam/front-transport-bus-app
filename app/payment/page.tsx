@@ -145,7 +145,7 @@ export default function PaymentPage() {
             </p>
             <h1 className="mt-3 text-3xl font-semibold text-foreground">
               {normalizedType === "ABONNEMENT" 
-                ? `Abonnement ${displayReference ? `#${displayReference}` : ""}` 
+                ? `Abonnement ${subscriptionTypeParam === 'MONTHLY' ? '(par mois)' : subscriptionTypeParam === 'YEARLY' ? '(par an)' : ''}` 
                 : trajetNameParam 
                   ? `Billet de Trajet ${displayReference}` 
                   : `Billet ${displayReference ? `#${displayReference}` : ""}`}
@@ -163,7 +163,7 @@ export default function PaymentPage() {
               </div>
               <p className="mt-2 text-sm text-muted-foreground">
                 {normalizedType === "ABONNEMENT" 
-                  ? `Transaction liée à l'abonnement ${displayReference ? `#${displayReference}` : ""}`
+                  ? `Transaction liée à l'abonnement ${subscriptionTypeParam === 'MONTHLY' ? '(par mois)' : subscriptionTypeParam === 'YEARLY' ? '(par an)' : ''}`
                   : trajetNameParam
                     ? `Ticket de Trajet ${displayReference}`
                     : `Transaction liée au ticket ${displayReference ? `#${displayReference}` : ""}`}
