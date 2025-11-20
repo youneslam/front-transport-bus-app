@@ -51,6 +51,7 @@ export default function AdminDashboardPage() {
       return
     }
 
+    
     setIsAdmin(true)
     loadDashboardData()
   }, [router])
