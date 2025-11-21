@@ -1,15 +1,17 @@
 /**
  * Bus Socket Service
- * Handles WebSocket connections for real-time bus location tracking
+ * Gère les connexions WebSocket pour le suivi en temps réel des bus
+ * 
+ * IMPORTANT: Ce service est en LECTURE SEULE (réception des mises à jour).
+ * Pour envoyer une mise à jour de position, utilisez LocationService.updateLocation()
+ * qui déclenchera automatiquement un broadcast WebSocket.
  */
 
 import { Client, IMessage } from "@stomp/stompjs"
-import SockJS from "sockjs-client"
 import type { BusLocationPayload } from "@/types/bus"
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "http://localhost:8080/ws"
 const LOCATION_TOPIC = "/topic/bus-location"
-const LOCATION_ENDPOINT = "/app/bus/location/send"
 
 type Listener = (payload: BusLocationPayload) => void
 
@@ -18,14 +20,17 @@ class BusSocketService {
   private listeners = new Set<Listener>()
   private connected = false
 
-  private initializeClient() {
+  private async initializeClient() {
     if (typeof window === "undefined") return
+
+    // Import dynamique de SockJS côté client uniquement
+    const SockJS = (await import("sockjs-client")).default
 
     this.client = new Client({
       reconnectDelay: 5000,
       heartbeatIncoming: 10000,
       heartbeatOutgoing: 10000,
-      webSocketFactory: () => new SockJS(WS_URL),
+      webSocketFactory: () => new SockJS(WS_URL) as any,
     })
 
     this.client.onConnect = () => {
@@ -52,9 +57,9 @@ class BusSocketService {
     }
   }
 
-  connect() {
+  async connect() {
     if (this.connected || this.client?.active) return
-    this.initializeClient()
+    await this.initializeClient()
     this.client?.activate()
   }
 
@@ -67,6 +72,11 @@ class BusSocketService {
     }
   }
 
+  /**
+   * Ajoute un écouteur pour recevoir les mises à jour de position en temps réel
+   * @param callback Fonction appelée à chaque mise à jour de position
+   * @returns Fonction de nettoyage pour retirer l'écouteur
+   */
   addListener(callback: Listener) {
     this.listeners.add(callback)
     this.connect()
@@ -75,20 +85,11 @@ class BusSocketService {
     }
   }
 
-  sendLocation(payload: BusLocationPayload) {
-    if (!payload.busId || Number.isNaN(Number(payload.busId))) {
-      throw new Error("Le busId est requis pour envoyer une position.")
-    }
-    this.connect()
-    if (!this.client || !this.connected) {
-      // Publish lorsque la connexion sera prête
-      setTimeout(() => this.sendLocation(payload), 500)
-      return
-    }
-    this.client.publish({
-      destination: LOCATION_ENDPOINT,
-      body: JSON.stringify(payload),
-    })
+  /**
+   * Obtient le statut de connexion WebSocket
+   */
+  isConnected(): boolean {
+    return this.connected
   }
 }
 
@@ -99,4 +100,3 @@ export const socketService = busSocketService
 
 // Re-export types
 export type { BusLocationPayload } from "@/types/bus"
-

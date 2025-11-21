@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
-import { busSocketService } from "@/lib/api/buses"
+import { LocationService } from "@/services/bus"
 
 interface LastPosition {
   latitude: number
@@ -32,7 +32,7 @@ export function SimulateBus() {
     }
   }, [watchId])
 
-  const sendPayload = (latitude: number, longitude: number) => {
+  const sendPayload = async (latitude: number, longitude: number) => {
     if (!busId.trim()) {
       toast({
         title: "Bus ID requis",
@@ -42,16 +42,17 @@ export function SimulateBus() {
       return
     }
     try {
-      busSocketService.sendLocation({
+      await LocationService.updateLocation({
         busId: Number(busId),
         latitude,
         longitude,
+        timestamp: Date.now(),
       })
       setLastPosition({ latitude, longitude, timestamp: Date.now() })
       toast({ title: "Position envoyée" })
     } catch (error) {
       toast({
-        title: "Erreur WebSocket",
+        title: "Erreur API",
         description: error instanceof Error ? error.message : "Impossible d'envoyer la position.",
         variant: "destructive",
       })
@@ -170,4 +171,3 @@ export function SimulateBus() {
     </Card>
   )
 }
-

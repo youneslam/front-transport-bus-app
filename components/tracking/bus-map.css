@@ -1,0 +1,47 @@
+/* Styles pour les marqueurs de bus */
+.bus-marker {
+  background: none !important;
+  border: none !important;
+}
+
+.bus-marker div {
+  transition: all 0.3s ease;
+}
+
+.bus-marker:hover div {
+  transform: scale(1.1);
+}
+
+/* Animation pour les nouveaux marqueurs */
+@keyframes markerPulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 0.8;
+  }
+}
+
+.bus-marker-new {
+  animation: markerPulse 1s ease-in-out;
+}
+
+/* Popup personnalisée */
+.leaflet-popup-content-wrapper {
+  border-radius: 12px;
+  padding: 0;
+}
+
+.leaflet-popup-content {
+  margin: 12px;
+  min-width: 200px;
+}
+
+/* Responsive carte */
+@media (max-width: 768px) {
+  .bus-map-container {
+    height: 400px !important;
+  }
+}
