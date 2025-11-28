@@ -53,6 +53,8 @@ export default function AdminStationsPage() {
   const [editing, setEditing] = useState<Station | null>(null)
   const [name, setName] = useState('')
   const [modalCityId, setModalCityId] = useState<number | null>(null)
+  const [latitude, setLatitude] = useState<string>('')
+  const [longitude, setLongitude] = useState<string>('')
   const [filterCityId, setFilterCityId] = useState<string>('all')
 
   useEffect(() => {
@@ -92,6 +94,8 @@ export default function AdminStationsPage() {
     setEditing(null)
     setName('')
     setModalCityId(null)
+    setLatitude('')
+    setLongitude('')
     setOpen(true)
   }
 
@@ -99,6 +103,8 @@ export default function AdminStationsPage() {
     setEditing(s)
     setName(getStationName(s))
     setModalCityId(getStationCityId(s))
+    setLatitude(s.latitude?.toString() || '')
+    setLongitude(s.longitude?.toString() || '')
     setOpen(true)
   }
 
@@ -113,7 +119,12 @@ export default function AdminStationsPage() {
         return
       }
 
-      const payload = { nom: name.trim(), cityId: modalCityId }
+      const payload = {
+        nom: name.trim(),
+        cityId: modalCityId,
+        latitude: latitude ? parseFloat(latitude) : undefined,
+        longitude: longitude ? parseFloat(longitude) : undefined
+      }
       if (editing) {
         await updateStation((editing as any).id, payload)
         toast({ title: 'Mis à jour', description: 'Station mise à jour.' })
@@ -138,8 +149,8 @@ export default function AdminStationsPage() {
       loadStations()
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Impossible de supprimer.'
-      toast({ 
-        title: 'Erreur', 
+      toast({
+        title: 'Erreur',
         description: errorMessage,
         variant: "destructive" as const
       })
@@ -151,9 +162,9 @@ export default function AdminStationsPage() {
     filterCityId === 'all'
       ? stations
       : stations.filter((station) => {
-          const cityId = getStationCityId(station)
-          return cityId !== null && cityId.toString() === filterCityId
-        })
+        const cityId = getStationCityId(station)
+        return cityId !== null && cityId.toString() === filterCityId
+      })
 
   const emptyStateMessage =
     stations.length === 0
@@ -332,6 +343,31 @@ export default function AdminStationsPage() {
               <p className="text-xs text-muted-foreground">
                 Associez la station à l'une des villes existantes pour faciliter les filtres et rapports
               </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="latitude">Latitude</Label>
+                <Input
+                  id="latitude"
+                  placeholder="Ex: 36.8065"
+                  type="number"
+                  step="any"
+                  value={latitude}
+                  onChange={(e) => setLatitude(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="longitude">Longitude</Label>
+                <Input
+                  id="longitude"
+                  placeholder="Ex: 10.1815"
+                  type="number"
+                  step="any"
+                  value={longitude}
+                  onChange={(e) => setLongitude(e.target.value)}
+                />
+              </div>
             </div>
           </div>
 

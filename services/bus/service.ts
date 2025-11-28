@@ -56,6 +56,10 @@ export const BusService = {
     makeRequest<void>(`/${id}`, {
       method: "DELETE",
     }),
+  simulate: (id: number): Promise<void> =>
+    makeRequest<void>(`/${id}/simulate`, {
+      method: "POST",
+    }),
 }
 
 // Re-export types for convenience

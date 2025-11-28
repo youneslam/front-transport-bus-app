@@ -35,6 +35,8 @@ export interface Station {
   nom?: string
   cityId?: number
   city?: City | { id: number; cityName: string }
+  latitude?: number
+  longitude?: number
 }
 
 export interface TicketPurchase {
@@ -117,7 +119,9 @@ export const fetchTrajetsByCity = async (cityId: number): Promise<Trajet[]> => {
  */
 export const fetchStationsForTrajet = async (trajetId: number): Promise<Station[]> => {
   try {
-    const response = await fetch(`/api/trajet-stations/by-trajet/${trajetId}`)
+    const response = await fetch(`/api/trajet-stations/by-trajet/${trajetId}`, {
+      cache: "no-store",
+    })
     if (!response.ok) throw new Error("Failed to fetch stations")
     return await response.json()
   } catch (error) {
@@ -676,6 +680,8 @@ export const deleteTrajet = async (id: number) => {
 export interface CreateStationRequest {
   nom: string
   cityId: number
+  latitude?: number
+  longitude?: number
 }
 
 export const createStation = async (payload: CreateStationRequest) => {
